@@ -54,29 +54,65 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user)
-      if (user) {
-        await fetchUserProfile(user.uid)
-      } else {
-        setUserProfile(null)
-      }
+    let unsubscribe = () => {}
+
+    // Safety timeout — show the app within 4 seconds no matter what
+    const timeout = setTimeout(() => setLoading(false), 4000)
+
+    try {
+      unsubscribe = onAuthStateChanged(
+        auth,
+        async (user) => {
+          clearTimeout(timeout)
+          setCurrentUser(user)
+          if (user) {
+            await fetchUserProfile(user.uid).catch(() => {})
+          } else {
+            setUserProfile(null)
+          }
+          setLoading(false)
+        },
+        (error) => {
+          clearTimeout(timeout)
+          console.error('Auth error:', error)
+          setLoading(false)
+        }
+      )
+    } catch (error) {
+      clearTimeout(timeout)
+      console.error('Firebase init error:', error)
       setLoading(false)
-    })
-    return unsubscribe
+    }
+
+    return () => {
+      clearTimeout(timeout)
+      unsubscribe()
+    }
   }, [])
 
   const value = {
     currentUser,
     userProfile,
+    loading,
     register,
     login,
     logout,
   }
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-stone-400">
+          <span className="text-4xl animate-bounce">🐴</span>
+          <span className="text-sm">Indlæser...</span>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   )
 }
